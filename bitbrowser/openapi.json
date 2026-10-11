@@ -1,0 +1,368 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "BitBrowser Local API (via probe tunnel)",
+    "version": "1.0.0",
+    "description": "比特浏览器本地 API（默认 127.0.0.1:54345），经 probe-agent 的 TCP 隧道访问。除 /health、/windowbounds* 与 /checkagent 外都要 header x-api-key（比特浏览器设置里的 Local API Token）。所有接口都是 POST + JSON。x-confirm 的接口需要请求头 X-Confirm: true；x-audit 的接口记入审计。"
+  },
+  "servers": [
+    {
+      "url": "/v1/probe/plugins/bitbrowser/agents/{agent}/api",
+      "description": "probe-hub / vm-server 透传入口",
+      "variables": { "agent": { "default": "DEVICE_ID", "description": "探针设备 ID 或 BIOS UUID" } }
+    }
+  ],
+  "security": [{ "apiKey": [] }],
+  "tags": [
+    { "name": "browser", "description": "窗口（浏览器配置）" },
+    { "name": "group", "description": "分组" },
+    { "name": "utils", "description": "工具" }
+  ],
+  "paths": {
+    "/health": {
+      "post": {
+        "operationId": "health", "tags": ["utils"], "summary": "本地服务健康检查", "security": [],
+        "requestBody": { "$ref": "#/components/requestBodies/Empty" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/list": {
+      "post": {
+        "operationId": "browserList", "tags": ["browser"], "summary": "分页列出窗口（page 从 0 开始）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["page", "pageSize"],
+          "properties": {
+            "page": { "type": "integer", "minimum": 0, "default": 0 },
+            "pageSize": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
+            "groupId": { "type": "string" }, "name": { "type": "string" }, "remark": { "type": "string" },
+            "seq": { "type": "integer" }, "minSeq": { "type": "integer" }, "maxSeq": { "type": "integer" },
+            "sort": { "type": "string", "enum": ["desc", "asc"] }
+          } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/detail": {
+      "post": {
+        "operationId": "browserDetail", "tags": ["browser"], "summary": "窗口完整配置",
+        "requestBody": { "$ref": "#/components/requestBodies/ById" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/open": {
+      "post": {
+        "operationId": "browserOpen", "tags": ["browser"], "summary": "打开窗口，返回 ws（CDP）、http（调试端口）、driver 与 pid", "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["id"],
+          "properties": {
+            "id": { "$ref": "#/components/schemas/BrowserId" },
+            "args": { "type": "array", "items": { "type": "string" }, "description": "额外的 Chromium 启动参数" },
+            "queue": { "type": "boolean", "description": "排队打开，避免并发冲突" },
+            "ignoreDefaultUrls": { "type": "boolean" },
+            "newPageUrl": { "type": "string" }
+          } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/close": {
+      "post": {
+        "operationId": "browserClose", "tags": ["browser"], "summary": "关闭窗口", "x-audit": true,
+        "requestBody": { "$ref": "#/components/requestBodies/ById" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/close/all": {
+      "post": {
+        "operationId": "browserCloseAll", "tags": ["browser"], "summary": "关闭全部已打开窗口", "x-confirm": true, "x-audit": true,
+        "requestBody": { "$ref": "#/components/requestBodies/Empty" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/closing/reset": {
+      "post": {
+        "operationId": "browserClosingReset", "tags": ["browser"], "summary": "重置卡住的打开中/关闭中状态", "x-audit": true,
+        "requestBody": { "$ref": "#/components/requestBodies/ById" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/update": {
+      "post": {
+        "operationId": "browserUpdate", "tags": ["browser"], "summary": "创建窗口（不带 id）或修改窗口（带 id）", "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BrowserConfig" } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/update/partial": {
+      "post": {
+        "operationId": "browserUpdatePartial", "tags": ["browser"], "summary": "批量修改多个窗口的部分字段", "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "allOf": [ { "$ref": "#/components/schemas/BrowserConfig" } ],
+          "type": "object", "required": ["ids"],
+          "properties": { "ids": { "$ref": "#/components/schemas/BrowserIds" } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/delete": {
+      "post": {
+        "operationId": "browserDelete", "tags": ["browser"], "summary": "彻底删除窗口及本地缓存", "x-confirm": true, "x-audit": true,
+        "requestBody": { "$ref": "#/components/requestBodies/ById" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/delete/ids": {
+      "post": {
+        "operationId": "browserDeleteIds", "tags": ["browser"], "summary": "批量彻底删除窗口（最多 100 个）", "x-confirm": true, "x-audit": true,
+        "requestBody": { "$ref": "#/components/requestBodies/ByIds" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/opened/ids": {
+      "post": {
+        "operationId": "browserOpenedIds", "tags": ["browser"], "summary": "当前已打开窗口的 ID",
+        "requestBody": { "$ref": "#/components/requestBodies/Empty" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/pids": {
+      "post": {
+        "operationId": "browserPids", "tags": ["browser"], "summary": "指定窗口的进程 ID",
+        "requestBody": { "$ref": "#/components/requestBodies/ByIds" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/pids/all": {
+      "post": {
+        "operationId": "browserPidsAll", "tags": ["browser"], "summary": "全部已打开窗口的进程 ID",
+        "requestBody": { "$ref": "#/components/requestBodies/Empty" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/pids/alive": {
+      "post": {
+        "operationId": "browserPidsAlive", "tags": ["browser"], "summary": "指定窗口中仍存活的进程 ID",
+        "requestBody": { "$ref": "#/components/requestBodies/ByIds" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/ports": {
+      "post": {
+        "operationId": "browserPorts", "tags": ["browser"], "summary": "全部已打开窗口的调试端口（窗口 ID → 端口）",
+        "requestBody": { "$ref": "#/components/requestBodies/Empty" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/fingerprint/random": {
+      "post": {
+        "operationId": "browserFingerprintRandom", "tags": ["browser"], "summary": "为窗口随机生成指纹", "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["browserId"], "properties": { "browserId": { "$ref": "#/components/schemas/BrowserId" } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/proxy/update": {
+      "post": {
+        "operationId": "browserProxyUpdate", "tags": ["browser"], "summary": "批量修改窗口代理", "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["ids"],
+          "properties": {
+            "ids": { "$ref": "#/components/schemas/BrowserIds" },
+            "proxyMethod": { "$ref": "#/components/schemas/ProxyMethod" },
+            "proxyType": { "$ref": "#/components/schemas/ProxyType" },
+            "host": { "type": "string" }, "port": { "type": ["integer", "string"] },
+            "proxyUserName": { "type": "string" }, "proxyPassword": { "type": "string" }
+          } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/remark/update": {
+      "post": {
+        "operationId": "browserRemarkUpdate", "tags": ["browser"], "summary": "批量修改窗口备注", "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["browserIds", "remark"],
+          "properties": { "browserIds": { "$ref": "#/components/schemas/BrowserIds" }, "remark": { "type": "string", "maxLength": 500 } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/group/update": {
+      "post": {
+        "operationId": "browserGroupUpdate", "tags": ["browser"], "summary": "批量移动窗口到分组", "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["groupId", "browserIds"],
+          "properties": { "groupId": { "type": "string" }, "browserIds": { "$ref": "#/components/schemas/BrowserIds" } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/cookies/get": {
+      "post": {
+        "operationId": "browserCookiesGet", "tags": ["browser"], "summary": "读取已打开窗口的 Cookie",
+        "requestBody": { "$ref": "#/components/requestBodies/ByBrowserId" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/cookies/set": {
+      "post": {
+        "operationId": "browserCookiesSet", "tags": ["browser"], "summary": "写入已打开窗口的 Cookie", "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["browserId", "cookies"],
+          "properties": { "browserId": { "$ref": "#/components/schemas/BrowserId" }, "cookies": { "type": "array", "items": { "type": "object" } } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/browser/cookies/clear": {
+      "post": {
+        "operationId": "browserCookiesClear", "tags": ["browser"], "summary": "清空窗口 Cookie", "x-confirm": true, "x-audit": true,
+        "requestBody": { "$ref": "#/components/requestBodies/ByBrowserId" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/cache/clear": {
+      "post": {
+        "operationId": "cacheClear", "tags": ["browser"], "summary": "删除窗口本地缓存目录", "x-confirm": true, "x-audit": true,
+        "requestBody": { "$ref": "#/components/requestBodies/ByIds" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/cache/clear/exceptExtensions": {
+      "post": {
+        "operationId": "cacheClearExceptExtensions", "tags": ["browser"], "summary": "清理窗口缓存但保留扩展", "x-confirm": true, "x-audit": true,
+        "requestBody": { "$ref": "#/components/requestBodies/ByIds" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/group/list": {
+      "post": {
+        "operationId": "groupList", "tags": ["group"], "summary": "分页列出分组（page 从 0 开始）",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["page", "pageSize"],
+          "properties": {
+            "page": { "type": "integer", "minimum": 0, "default": 0 },
+            "pageSize": { "type": "integer", "minimum": 1, "default": 10 },
+            "all": { "type": "boolean", "description": "返回全部可管理分组" }
+          } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/group/detail": {
+      "post": {
+        "operationId": "groupDetail", "tags": ["group"], "summary": "分组详情",
+        "requestBody": { "$ref": "#/components/requestBodies/ByGroupId" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/group/add": {
+      "post": {
+        "operationId": "groupAdd", "tags": ["group"], "summary": "新建分组", "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["groupName", "sortNum"],
+          "properties": { "groupName": { "type": "string" }, "sortNum": { "type": "integer", "default": 0 } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/group/edit": {
+      "post": {
+        "operationId": "groupEdit", "tags": ["group"], "summary": "修改分组名称与排序", "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["id", "groupName", "sortNum"],
+          "properties": { "id": { "type": "string" }, "groupName": { "type": "string" }, "sortNum": { "type": "integer" } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/group/delete": {
+      "post": {
+        "operationId": "groupDelete", "tags": ["group"], "summary": "删除分组", "x-confirm": true, "x-audit": true,
+        "requestBody": { "$ref": "#/components/requestBodies/ByGroupId" },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/windowbounds": {
+      "post": {
+        "operationId": "windowBounds", "tags": ["utils"], "summary": "按宫格或对角线排列已打开窗口", "security": [], "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["box", "diagonal"] },
+            "startX": { "type": "integer" }, "startY": { "type": "integer" },
+            "width": { "type": "integer" }, "height": { "type": "integer" },
+            "col": { "type": "integer" }, "spaceX": { "type": "integer" }, "spaceY": { "type": "integer" },
+            "offsetX": { "type": "integer" }, "offsetY": { "type": "integer" },
+            "ids": { "$ref": "#/components/schemas/BrowserIds" },
+            "seqlist": { "type": "array", "items": { "type": "integer" } }
+          } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/windowbounds/flexable": {
+      "post": {
+        "operationId": "windowBoundsFlexable", "tags": ["utils"], "summary": "自适应排列已打开窗口", "security": [], "x-audit": true,
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "properties": { "seqlist": { "type": "array", "items": { "type": "integer" } } } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    },
+    "/checkagent": {
+      "post": {
+        "operationId": "checkAgent", "tags": ["utils"], "summary": "检测代理连通性与出口 IP", "security": [],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["host", "port", "proxyType"],
+          "properties": {
+            "host": { "type": "string" }, "port": { "type": ["integer", "string"] },
+            "proxyType": { "$ref": "#/components/schemas/ProxyType" },
+            "proxyUserName": { "type": "string" }, "proxyPassword": { "type": "string" }
+          } } } } },
+        "responses": { "200": { "$ref": "#/components/responses/Result" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiKey": { "type": "apiKey", "in": "header", "name": "x-api-key", "description": "比特浏览器 → 设置 → Local API Token" }
+    },
+    "schemas": {
+      "BrowserId": { "type": "string", "minLength": 32, "maxLength": 32 },
+      "BrowserIds": { "type": "array", "items": { "$ref": "#/components/schemas/BrowserId" }, "maxItems": 100 },
+      "ProxyMethod": { "type": "integer", "enum": [1, 2, 3], "description": "2 自定义；3 提取 IP" },
+      "ProxyType": { "type": "string", "enum": ["noproxy", "http", "https", "socks5", "ssh"] },
+      "BrowserConfig": {
+        "type": "object",
+        "properties": {
+          "id": { "$ref": "#/components/schemas/BrowserId" },
+          "name": { "type": "string", "maxLength": 50 },
+          "remark": { "type": "string", "maxLength": 500 },
+          "groupId": { "type": "string" },
+          "platform": { "type": "string" },
+          "url": { "type": "string" },
+          "userName": { "type": "string", "maxLength": 100 },
+          "password": { "type": "string", "maxLength": 100 },
+          "cookie": { "type": ["string", "array"] },
+          "proxyMethod": { "$ref": "#/components/schemas/ProxyMethod" },
+          "proxyType": { "$ref": "#/components/schemas/ProxyType" },
+          "host": { "type": "string" }, "port": { "type": ["integer", "string"] },
+          "proxyUserName": { "type": "string" }, "proxyPassword": { "type": "string" },
+          "browserFingerPrint": { "type": "object", "additionalProperties": true, "default": {} }
+        },
+        "additionalProperties": true
+      },
+      "Result": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {},
+          "msg": { "type": "string" }
+        }
+      }
+    },
+    "requestBodies": {
+      "Empty": { "content": { "application/json": { "schema": { "type": "object" } } } },
+      "ById": { "required": true, "content": { "application/json": { "schema": {
+        "type": "object", "required": ["id"], "properties": { "id": { "$ref": "#/components/schemas/BrowserId" } } } } } },
+      "ByIds": { "required": true, "content": { "application/json": { "schema": {
+        "type": "object", "required": ["ids"], "properties": { "ids": { "$ref": "#/components/schemas/BrowserIds" } } } } } },
+      "ByBrowserId": { "required": true, "content": { "application/json": { "schema": {
+        "type": "object", "required": ["browserId"], "properties": { "browserId": { "$ref": "#/components/schemas/BrowserId" } } } } } },
+      "ByGroupId": { "required": true, "content": { "application/json": { "schema": {
+        "type": "object", "required": ["id"], "properties": { "id": { "type": "string" } } } } } }
+    },
+    "responses": {
+      "Result": { "description": "比特浏览器统一返回 {success, data, msg}", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Result" } } } }
+    }
+  }
+}

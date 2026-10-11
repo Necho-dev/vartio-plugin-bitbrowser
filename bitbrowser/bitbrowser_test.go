@@ -3,7 +3,7 @@ package bitbrowser
 import (
 	"context"
 	"encoding/json"
-	"github.com/Necho-dev/vartio-plugin-bitbrowser/sdk"
+	"github.com/Necho-dev/vartio/sdk"
 	"io"
 	"net"
 	"net/http"

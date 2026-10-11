@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/Necho-dev/vartio-plugin-bitbrowser/bitbrowser"
-	"github.com/Necho-dev/vartio-plugin-bitbrowser/sdk"
+	"github.com/Necho-dev/vartio/sdk"
 )
 
 func main() {

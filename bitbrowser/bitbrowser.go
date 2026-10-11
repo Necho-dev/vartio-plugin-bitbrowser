@@ -11,7 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Necho-dev/vartio-plugin-bitbrowser/sdk"
+	"github.com/Necho-dev/vartio/sdk"
 	"io"
 	"io/fs"
 	"net/http"
@@ -63,17 +63,6 @@ func New() *Plugin {
 		target = DefaultTarget
 	}
 	return &Plugin{target: target, apiKey: strings.TrimSpace(os.Getenv("BITBROWSER_API_KEY"))}
-}
-
-func (p *Plugin) Manifest() sdk.Manifest {
-	return sdk.Manifest{
-		Name:        "bitbrowser",
-		Title:       "比特浏览器",
-		Version:     "1.0.0",
-		Description: "经探针 TCP 隧道调用远端机器上的比特浏览器本地 API（" + p.target + "）",
-		Primitives:  []string{sdk.CapTunnelTCP},
-		Targets:     []string{p.target},
-	}
 }
 
 func (p *Plugin) Init(_ context.Context, host sdk.Host) error {

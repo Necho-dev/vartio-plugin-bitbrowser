@@ -14,7 +14,9 @@ import (
 	"github.com/Necho-dev/vartio/sdk"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -114,7 +116,7 @@ func (p *Plugin) handleStatus(w http.ResponseWriter, r *http.Request) {
 		sdk.WriteError(w, sdk.ErrOffline())
 		return
 	}
-	st := Status{Agent: id, Target: p.target}
+	st := Status{Agent: id, Target: p.targetFor(r.Context(), id)}
 	start := time.Now()
 	status, body, err := p.send(r.Context(), id, http.MethodPost, "/health", "", []byte("{}"), "")
 	switch {
@@ -219,8 +221,48 @@ func (p *Plugin) forward(w http.ResponseWriter, r *http.Request, op *Operation, 
 	_, _ = w.Write(resp)
 }
 
+func (p *Plugin) targetFor(ctx context.Context, agent string) string {
+	if port := strings.TrimSpace(pluginConfig(ctx, agent)["port"]); port != "" {
+		if n, err := strconv.Atoi(port); err == nil && n > 0 && n < 65536 {
+			return net.JoinHostPort("127.0.0.1", port)
+		}
+	}
+	if p.target != "" {
+		return p.target
+	}
+	return DefaultTarget
+}
+
+func pluginConfig(ctx context.Context, agent string) map[string]string {
+	base := strings.TrimRight(os.Getenv("VARTIO_PLUGIN_HUB"), "/")
+	token := os.Getenv("VARTIO_PLUGIN_TOKEN")
+	out := map[string]string{}
+	if base == "" || token == "" || agent == "" {
+		return out
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/config?agent="+url.QueryEscape(agent), nil)
+	if err != nil {
+		return out
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return out
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return out
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if out == nil {
+		out = map[string]string{}
+	}
+	return out
+}
+
 func (p *Plugin) send(ctx context.Context, id, method, path, query string, body []byte, key string) (int, []byte, error) {
-	u := "http://" + p.target + path
+	target := p.targetFor(ctx, id)
+	u := "http://" + target + path
 	if query != "" {
 		u += "?" + query
 	}
@@ -232,7 +274,7 @@ func (p *Plugin) send(ctx context.Context, id, method, path, query string, body 
 	if key != "" {
 		req.Header.Set("x-api-key", key)
 	}
-	resp, err := p.host.HTTPClient(id, p.target).Do(req)
+	resp, err := p.host.HTTPClient(id, target).Do(req)
 	if err != nil {
 		if api := asAPI(err); api != nil {
 			return 0, nil, api

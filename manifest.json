@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "name": "bitbrowser",
   "title": "比特浏览器",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "经探针 TCP 隧道调用远端机器上的比特浏览器本地 API（127.0.0.1:54345）",
   "source": "https://github.com/Necho-dev/vartio-plugin-bitbrowser",
   "engines": {"hostApi": "1"},
